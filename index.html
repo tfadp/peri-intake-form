@@ -26,6 +26,14 @@
   .amber { color:var(--amber); }
   .muted { color:var(--muted); }
   #results { margin-top:24px; }
+  button.secondary { background:var(--amber); }
+  .hint { color:var(--muted); font-size:13px; margin-top:8px; }
+  .report { margin-top:12px; font-size:15px; line-height:1.6; }
+  .report h1 { font-size:20px; } .report h2 { font-size:16px; margin-top:22px; }
+  .report table { border-collapse:collapse; width:100%; font-size:13px; margin:8px 0; }
+  .report th, .report td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+  .report code { background:#f4f4f4; padding:1px 4px; border-radius:4px; }
+  .report ul { padding-left:20px; }
 </style>
 </head>
 <body>
@@ -50,6 +58,12 @@
 
   <div id="results"></div>
 
+  <hr style="margin:28px 0 0;border:0;border-top:1px solid var(--line)">
+  <button id="reportBtn" class="secondary" onclick="runReport()">Run the report</button>
+  <p class="hint" id="reportHint">Summarizes every transcript collected so far with Claude. Takes ~30s.</p>
+  <div id="report" class="report"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   // Remember settings on this device so you do not retype them on the phone.
@@ -90,6 +104,38 @@
     $("urls").value = "";
     $("followers").value = "";
     $("go").disabled = false;
+  }
+
+  async function runReport() {
+    const endpoint = $("endpoint").value.trim();
+    const secret = $("secret").value.trim();
+    if (!endpoint) { alert("Set the Function URL under Settings first."); return; }
+    const analyzeUrl = endpoint.replace(/\/ingest\/?$/, "/analyze");
+    const btn = $("reportBtn"), out = $("report"), hint = $("reportHint");
+    btn.disabled = true;
+    out.innerHTML = "";
+    hint.textContent = "Running… reading every transcript and writing the summary (~30s).";
+    try {
+      const r = await fetch(analyzeUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-ingest-secret": secret },
+        body: "{}",
+      });
+      const d = await r.json();
+      if (d.ok && d.report) {
+        hint.textContent = `Based on ${d.transcript_count} transcript(s) from ${d.creator_count} creator(s).`;
+        out.innerHTML = window.marked
+          ? marked.parse(d.report)
+          : "<pre>" + d.report.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])) + "</pre>";
+      } else {
+        hint.textContent = "";
+        out.textContent = d.error || "Something went wrong.";
+      }
+    } catch (e) {
+      hint.textContent = "";
+      out.textContent = String(e);
+    }
+    btn.disabled = false;
   }
 
   function addRow(url, status) {
